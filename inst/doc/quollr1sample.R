@@ -1,7 +1,8 @@
 ## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  message = FALSE
 )
 
 ## ----setup--------------------------------------------------------------------
@@ -9,86 +10,47 @@ library(cardinalR)
 library(langevitour)
 
 ## -----------------------------------------------------------------------------
-gau_data <- gau_clust(
-  n = 500, num_clust = 5,
-  mean_matrix = rbind(c(1, 0, 0, 0), c(0, 1, 0, 0), c(0, 0, 1, 0), c(0, 0, 0, 1), c(0, 0, 0, 0)),
-  var_vec = c(0.05, 0.05, 0.05, 0.05, 0.05), num_dims = 4, num_noise = 2,
-  min_n = -0.05, max_n = 0.05
-)
-
-colnames(gau_data) <- paste0("x", seq_len(NCOL(gau_data)))
+gau_data <- gen_gaussian(n = 500, p = 4, s = diag(4) * 0.01)
 
 langevitour(gau_data, pointSize = 2)
 
 ## -----------------------------------------------------------------------------
-two_grd_data <- two_grid_comb_bkg(n_value = 15, num_noise = 2, min_n = -0.05, max_n = 0.05)
-two_grd_data$n
+cube_grd_data <- gen_cubehole(n = 5000, p = 6)
 
-colnames(two_grd_data$df) <- paste0("x", seq_len(NCOL(two_grd_data$df)))
-
-langevitour(two_grd_data$df, pointSize = 2)
+langevitour(cube_grd_data, pointSize = 2)
 
 ## -----------------------------------------------------------------------------
-curvy_cyc_data <- curvy_cycle(n = 300, num_noise = 2, min_n = -0.05, max_n = 0.05)
-
-colnames(curvy_cyc_data) <- paste0("x", seq_len(NCOL(curvy_cyc_data)))
+curvy_cyc_data <- gen_curvycycle(n = 500, p = 4) 
 
 langevitour(curvy_cyc_data, pointSize = 2)
 
 ## -----------------------------------------------------------------------------
-tree_data <- tree(
-  n = 490, num_noise = 2,
-  min_n = -0.05, max_n = 0.05
-)
-
-colnames(tree_data) <- paste0("x", seq_len(NCOL(tree_data)))
+tree_data <- gen_orgcurvybranches(n = 600, p = 6, k = 6) 
 
 langevitour(tree_data, pointSize = 2)
 
 ## -----------------------------------------------------------------------------
-four_linear_data <- four_long_clust(
-  n = 500, num_noise = 2, min_n = -0.05,
-  max_n = 0.05
-)
+cone_data <- gen_cone(n = 500, p = 4, h = 5, ratio = 0.5) 
 
-colnames(four_linear_data) <- paste0("x", seq_len(NCOL(four_linear_data)))
-
-langevitour(four_linear_data, pointSize = 2)
+langevitour(cone_data, pointSize = 2)
 
 ## -----------------------------------------------------------------------------
-two_curvy_panckakes <- two_curvy_panckakes(
-  n = 300, num_noise = 2, min_n = -0.05,
-  max_n = 0.05
-)
+spiral_data <- gen_conicspiral(n = 500, p = 5, spins = 2)
 
-colnames(two_curvy_panckakes) <- paste0("x", seq_len(NCOL(two_curvy_panckakes)))
-
-langevitour(two_curvy_panckakes, pointSize = 2)
+langevitour(spiral_data, pointSize = 2)
 
 ## -----------------------------------------------------------------------------
-sphere_data <- sphere(
-  radius = 1, resolution = 20, num_noise = 2,
-  min_n = -0.05, max_n = 0.05
-)
-
-colnames(sphere_data) <- paste0("x", seq_len(NCOL(sphere_data)))
+sphere_data <- gen_gridedsphere(n = 500, p = 4)
 
 langevitour(sphere_data, pointSize = 2)
 
 ## -----------------------------------------------------------------------------
-mobius_clust_data <- mobius_clust(
-  n = 500, num_noise = 2, min_n = -0.05,
-  max_n = 0.05
-)
+scurve_data <- gen_scurvehole(n = 600, p = 8) 
 
-colnames(mobius_clust_data) <- paste0("x", seq_len(NCOL(mobius_clust_data)))
-
-langevitour(mobius_clust_data, pointSize = 2)
+langevitour(scurve_data, pointSize = 2)
 
 ## -----------------------------------------------------------------------------
-train_3d_data <- tri_3d(n = 512, num_noise = 2, min_n = -0.05, max_n = 0.05)
+pyr_data <- gen_pyrholes(n = 1000, p = 4)
 
-colnames(train_3d_data) <- paste0("x", seq_len(NCOL(train_3d_data)))
-
-langevitour(train_3d_data, pointSize = 2)
+langevitour(pyr_data, pointSize = 2)
 

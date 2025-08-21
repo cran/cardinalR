@@ -1,0 +1,41 @@
+## ----include = FALSE----------------------------------------------------------
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE
+)
+
+## ----setup--------------------------------------------------------------------
+library(cardinalR)
+library(langevitour)
+
+## -----------------------------------------------------------------------------
+rotations_4d <- list(
+cluster1 = list(
+  list(plane = c(1, 2), angle = 60), # Rotation in the (1, 2) plane
+  list(plane = c(3, 4), angle = 90)  # Rotation in the (3, 4) plane
+  ),
+cluster2 = list(
+  list(plane = c(1, 3), angle = 30) # Rotation in the (1, 3) plane
+  ),
+cluster3 = list(
+  list(plane = c(2, 4), angle = 45) # Rotation in the (2, 4) plane
+  )
+)
+
+## -----------------------------------------------------------------------------
+clust_data <- gen_multicluster(n = c(200, 300, 500), p = 4, k = 3,
+  loc = matrix(c(
+    0, 0, 0, 0,
+    5, 9, 0, 0,
+    3, 4, 10, 7
+  ), nrow = 3, byrow = TRUE),
+  scale = c(2, 5, 1),
+  shape = c("gaussian", "cone", "unifcube"),
+  rotation = rotations_4d,
+  is_bkg = FALSE
+)
+
+langevitour(clust_data |> dplyr::select(-cluster), 
+            pointSize = 2, group = clust_data$cluster)
+
