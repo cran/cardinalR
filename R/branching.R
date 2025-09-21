@@ -5,13 +5,19 @@
 #' @param n A numeric value (default: 400) representing the sample size.
 #' @param p A numeric value (default: 4) representing the number of dimensions.
 #' @param k A numeric value (default: 4) representing the number of branches.
+#' @param noise_fun A function specifying which noise generation function to
+#' use for the additional dimensions. Default is \code{gen_noisedims}. Other options include \code{gen_wavydims1}, \code{gen_wavydims2}, and \code{gen_wavydims3}.
+#' @param ... Additional arguments passed to the selected \code{noise_fun}
+#' (e.g., \code{m}, \code{s}, \code{theta}, \code{x1_vec}, \code{data}).
 #' @return A data containing exponential shaped branches.
+#'
 #' @export
 #'
 #' @examples
 #' set.seed(20240412)
-#' expbranches <- gen_expbranches(n = 400, p = 4, k = 4)
-gen_expbranches <- function(n = 400, p = 4, k = 4) {
+#' expbranches <- gen_expbranches(n = 400, p = 4, k = 4,
+#' noise_fun = gen_noisedims, m = rep(0, 2), s = rep(0.1, 2))
+gen_expbranches <- function(n = 400, p = 4, k = 4, noise_fun = gen_noisedims, ...) {
 
   if (p < 2) {
     cli::cli_abort("p should be greater than 2.")
@@ -29,7 +35,7 @@ gen_expbranches <- function(n = 400, p = 4, k = 4) {
 
   scale_vec <- sample(seq(0.5, 2, by = 0.1), size = k)
 
-  df <- matrix(0, nrow = n, ncol = p)
+  df <- NULL
 
   for (i in 1:k) {
 
@@ -47,14 +53,33 @@ gen_expbranches <- function(n = 400, p = 4, k = 4) {
       df1[, 2] <- exp(scale_vec[i] * df1[, 1]) + stats::runif(n_vec[i], 0, 0.1)
     }
 
-    if (p > 2){
+    # Add noise dimensions if p > 2
+    if (p > 2) {
+      # If set defaults
+      if (identical(noise_fun, gen_noisedims)) {
+        dots <- list(...)
+        if (is.null(dots$m)) dots$m <- rep(0, p - 2)
+        if (is.null(dots$s)) dots$s <- rep(0.05, p - 2)
+        noise_df <- do.call(noise_fun, c(list(n = n_vec[i], p = p - 2), dots))
+      } else if (identical(noise_fun, gen_wavydims1)) {
+        dots <- list(...)
+        if (is.null(dots$theta)) dots$theta <- seq(pi / 6, 12 * pi / 6, length.out = n)
+        noise_df <- do.call(noise_fun, c(list(n = n_vec[i], p = p - 2), dots))
+      } else if (identical(noise_fun, gen_wavydims2)) {
+        dots <- list(...)
+        if (is.null(dots$x1_vec)) dots$x1_vec <- df[, 1]
+        noise_df <- do.call(noise_fun, c(list(n = n_vec[i], p = p - 2), dots))
+      } else if (identical(noise_fun, gen_wavydims3)) {
+        dots <- list(...)
+        if (is.null(dots$df)) dots$data <- df
+        noise_df <- do.call(noise_fun, c(list(n = n_vec[i], p = p - 2), dots))
+      } else {
+        noise_df <- noise_fun(n = n_vec[i], p = p - 2, ...)
+      }
+      if (!is.matrix(noise_df)) noise_df <- as.matrix(noise_df)
 
-      noise_df <- gen_noisedims(n = n_vec[i], p = (p-2), m = rep(0, p-2), s = rep(0.1, p-2)) |>
-        as.matrix()
       colnames(noise_df) <- paste0("x", 3:p)
-
       df1 <- cbind(df1, noise_df)
-
     }
 
     df <- rbind(df, df1)
@@ -77,57 +102,51 @@ gen_expbranches <- function(n = 400, p = 4, k = 4) {
 #' @param n A numeric value (default: 400) representing the sample size.
 #' @param p A numeric value (default: 4) representing the number of dimensions.
 #' @param k A numeric value (default: 4) representing the number of branches.
+#' @param allow_share A logical value (default: TRUE). If TRUE, multiple branches may share the same 2D subspace. If FALSE, branches are sampled without replacement from all possible 2D subspaces until exhausted.
+#' @param noise_fun A function specifying which noise generation function to
+#' use for the additional dimensions. Default is \code{gen_noisedims}.
+#' Other options include \code{gen_wavydims1}, \code{gen_wavydims2}, and \code{gen_wavydims3}.
+#' @param ... Additional arguments passed to the selected \code{noise_fun}
+#' (e.g., \code{m}, \code{s}, \code{theta}, \code{x1_vec}, \code{data}).
 #' @return A data containing curvy shaped branches originated in one point.
 #' @export
 #'
 #' @examples
 #' set.seed(20240412)
-#' orgcurvybranches <- gen_orgcurvybranches(n = 400, p = 4, k = 4)
-gen_orgcurvybranches <- function(n = 400, p = 4, k = 4) {
+#' orgcurvybranches <- gen_orgcurvybranches(n = 400, p = 4, k = 4,
+#' noise_fun = gen_noisedims, m = rep(0, 2), s = rep(0.1, 2))
+gen_orgcurvybranches <- function(n = 400, p = 4, k = 4,
+                                 allow_share = TRUE,
+                                 noise_fun = gen_noisedims, ...) {
 
-  if (p < 2) {
-    cli::cli_abort("p should be greater than 2.")
-  }
-
-  if (n <= 0) {
-    cli::cli_abort("n should be positive.")
-  }
-
-  if (k <= 0) {
-    cli::cli_abort("k should be positive.")
-  }
+  if (p < 2) cli::cli_abort("p should be greater than 2.")
+  if (n <= 0) cli::cli_abort("n should be positive.")
+  if (k <= 0) cli::cli_abort("k should be positive.")
 
   n_vec <- gen_nsum(n = n, k = k)
 
-  ## Assign the combinations
-  comb <- gtools::combinations(p, 2) |> ## Pairs
-    tibble::as_tibble()
+  # --- Generate all 2D subspace combinations ---
+  comb <- gtools::combinations(p, 2) |> tibble::as_tibble()
 
-  if (k <= NROW(comb)) {
-    comb_select <- dplyr::sample_n(comb, size = k)
-    scale_vec <- rep(1, k)
-
-  } else {
-    # 1. Select all combinations from 'comb'
-    all_combinations <- comb
-
-    # 2. Calculate the number of remaining combinations needed
-    remaining_needed <- k - NROW(all_combinations)
-
-    # 3. Sample the remaining combinations from 'comb' with replacement
-    remaining_sample <- dplyr::sample_n(comb, size = remaining_needed, replace = TRUE)
-
-    # 4. Combine all combinations with the remaining sample
-    comb_select <- dplyr::bind_rows(all_combinations, remaining_sample)
-
+  # --- Sample combinations depending on allow_share ---
+  if (allow_share) {
+    comb_select <- dplyr::sample_n(comb, size = k, replace = TRUE)
     scale_vec <- sample(seq(1, 8, by = 0.5), size = k, replace = TRUE)
-
+  } else {
+    if (k <= NROW(comb)) {
+      comb_select <- dplyr::sample_n(comb, size = k, replace = FALSE)
+      scale_vec <- rep(1, k)
+    } else {
+      remaining_needed <- k - NROW(comb)
+      comb_select <- dplyr::bind_rows(comb,
+                                      dplyr::sample_n(comb, size = remaining_needed, replace = TRUE))
+      scale_vec <- sample(seq(1, 8, by = 0.5), size = k, replace = TRUE)
     }
+  }
 
   df <- matrix(0, nrow = 0, ncol = p)
 
   for (i in 1:k) {
-
     index1 <- comb_select$V1[i]
     index2 <- comb_select$V2[i]
 
@@ -138,28 +157,40 @@ gen_orgcurvybranches <- function(n = 400, p = 4, k = 4) {
     df1 <- matrix(c(a, b), ncol = 2)
     colnames(df1) <- paste0("x", c(index1, index2))
 
-    if (p > 2){
+    # --- Add noise dimensions ---
+    if (p > 2) {
+      dots <- list(...)
+      if (identical(noise_fun, gen_noisedims)) {
+        if (is.null(dots$m)) dots$m <- rep(0, p - 2)
+        if (is.null(dots$s)) dots$s <- rep(0.05, p - 2)
+      } else if (identical(noise_fun, gen_wavydims1)) {
+        if (is.null(dots$theta)) dots$theta <- seq(pi / 6, 12 * pi / 6, length.out = n)
+      } else if (identical(noise_fun, gen_wavydims2)) {
+        if (is.null(dots$x1_vec)) dots$x1_vec <- df[, 1]
+      } else if (identical(noise_fun, gen_wavydims3)) {
+        if (is.null(dots$df)) dots$data <- df
+      }
 
-      noise_df <- gen_noisedims(n = n_vec[i], p = (p-2), m = rep(0, p-2), s = rep(0.1, p-2)) |>
-        as.matrix()
+      noise_df <- do.call(noise_fun, c(list(n = n_vec[i], p = p - 2), dots))
+      if (!is.matrix(noise_df)) noise_df <- as.matrix(noise_df)
 
       vector <- 1:p
       filter_values <- c(index1, index2)
       colnames(noise_df) <- paste0("x", vector[!(vector %in% filter_values)])
 
       df1 <- cbind(df1, noise_df)[, paste0("x", 1:p)]
-
     }
 
     df <- rbind(df, df1)
-
   }
 
   df <- tibble::as_tibble(df, .name_repair = "minimal")
+  names(df) <- paste0("x", 1:p)
+
   cli::cli_alert_success("Data generation completed successfully!!!")
   return(df)
-
 }
+
 
 
 #' Generate data with linear shaped branches in a initial point
@@ -169,57 +200,54 @@ gen_orgcurvybranches <- function(n = 400, p = 4, k = 4) {
 #' @param n A numeric value (default: 400) representing the sample size.
 #' @param p A numeric value (default: 4) representing the number of dimensions.
 #' @param k A numeric value (default: 4) representing the number of branches.
+#' @param noise_fun A function specifying which noise generation function to
+#' use for the additional dimensions. Default is \code{gen_noisedims}. Other options include \code{gen_wavydims1}, \code{gen_wavydims2}, and \code{gen_wavydims3}.
+#' @param allow_share A logical value (default: TRUE).
+#' If TRUE, multiple branches may share the same 2D subspace.
+#' If FALSE, branches are sampled without replacement from all possible 2D
+#' subspaces until exhausted.
+#' @param ... Additional arguments passed to the selected \code{noise_fun}
+#' (e.g., \code{m}, \code{s}, \code{theta}, \code{x1_vec}, \code{data}).
 #' @return A data containing linear shaped branches originated in one point.
 #' @export
 #'
 #' @examples
 #' set.seed(20240412)
-#' orglinearbranches <- gen_orglinearbranches(n = 400, p = 4, k = 4)
-gen_orglinearbranches <- function(n = 400, p = 4, k = 4) {
+#' orglinearbranches <- gen_orglinearbranches(n = 400, p = 4, k = 4,
+#' noise_fun = gen_noisedims, m = rep(0, 2), s = rep(0.1, 2))
+gen_orglinearbranches <- function(n = 400, p = 4, k = 4,
+                                  allow_share = TRUE,
+                                  noise_fun = gen_noisedims, ...) {
 
-  if (p < 2) {
-    cli::cli_abort("p should be greater than 2.")
-  }
-
-  if (n <= 0) {
-    cli::cli_abort("n should be positive.")
-  }
-
-  if (k <= 0) {
-    cli::cli_abort("k should be positive.")
-  }
+  if (p < 2) cli::cli_abort("p should be greater than 2.")
+  if (n <= 0) cli::cli_abort("n should be positive.")
+  if (k <= 0) cli::cli_abort("k should be positive.")
 
   n_vec <- gen_nsum(n = n, k = k)
 
-  ## Assign the combinations
-  comb <- gtools::combinations(p, 2) |> ## Pairs
-    tibble::as_tibble()
+  # --- Generate all 2D subspace combinations ---
+  comb <- gtools::combinations(p, 2) |> tibble::as_tibble()
 
-  if (k <= NROW(comb)) {
-    comb_select <- dplyr::sample_n(comb, size = k)
-    scale_vec <- rep(1, k)
-
-  } else {
-    # 1. Select all combinations from 'comb'
-    all_combinations <- comb
-
-    # 2. Calculate the number of remaining combinations needed
-    remaining_needed <- k - NROW(all_combinations)
-
-    # 3. Sample the remaining combinations from 'comb' with replacement
-    remaining_sample <- dplyr::sample_n(comb, size = remaining_needed, replace = TRUE)
-
-    # 4. Combine all combinations with the remaining sample
-    comb_select <- dplyr::bind_rows(all_combinations, remaining_sample)
-
+  # --- Sample combinations depending on allow_share ---
+  if (allow_share) {
+    comb_select <- dplyr::sample_n(comb, size = k, replace = TRUE)
     scale_vec <- sample(seq(1, 8, by = 0.5), size = k, replace = TRUE)
-
+  } else {
+    if (k <= NROW(comb)) {
+      comb_select <- dplyr::sample_n(comb, size = k, replace = FALSE)
+      scale_vec <- rep(1, k)
+    } else {
+      # Fill with replacement if needed
+      remaining_needed <- k - NROW(comb)
+      comb_select <- dplyr::bind_rows(comb,
+                                      dplyr::sample_n(comb, size = remaining_needed, replace = TRUE))
+      scale_vec <- sample(seq(1, 8, by = 0.5), size = k, replace = TRUE)
+    }
   }
 
   df <- matrix(0, nrow = 0, ncol = p)
 
   for (i in 1:k) {
-
     index1 <- comb_select$V1[i]
     index2 <- comb_select$V2[i]
 
@@ -230,31 +258,43 @@ gen_orglinearbranches <- function(n = 400, p = 4, k = 4) {
     df1 <- matrix(c(a, b), ncol = 2)
     colnames(df1) <- paste0("x", c(index1, index2))
 
-    if (p > 2){
+    # --- Add noise dimensions ---
+    if (p > 2) {
+      dots <- list(...)
+      # Handle default parameters for known noise functions
+      if (identical(noise_fun, gen_noisedims)) {
+        if (is.null(dots$m)) dots$m <- rep(0, p - 2)
+        if (is.null(dots$s)) dots$s <- rep(0.05, p - 2)
+      } else if (identical(noise_fun, gen_wavydims1)) {
+        if (is.null(dots$theta)) dots$theta <- seq(pi / 6, 12 * pi / 6, length.out = n)
+      } else if (identical(noise_fun, gen_wavydims2)) {
+        if (is.null(dots$x1_vec)) dots$x1_vec <- df[, 1]
+      } else if (identical(noise_fun, gen_wavydims3)) {
+        if (is.null(dots$df)) dots$data <- df
+      }
 
-      noise_df <- gen_noisedims(n = n_vec[i], p = (p-2), m = rep(0, p-2), s = rep(0.1, p-2)) |>
-        as.matrix()
+      noise_df <- do.call(noise_fun, c(list(n = n_vec[i], p = p - 2), dots))
+      if (!is.matrix(noise_df)) noise_df <- as.matrix(noise_df)
 
+      # Assign column names for noise dims
       vector <- 1:p
       filter_values <- c(index1, index2)
       colnames(noise_df) <- paste0("x", vector[!(vector %in% filter_values)])
 
-      df1 <- cbind(df1, noise_df)[,paste0("x", 1:p)]
-
+      # Combine main and noise dimensions in order
+      df1 <- cbind(df1, noise_df)[, paste0("x", 1:p)]
     }
 
     df <- rbind(df, df1)
-
   }
-
 
   df <- tibble::as_tibble(df, .name_repair = "minimal")
   names(df) <- paste0("x", 1:p)
 
   cli::cli_alert_success("Data generation completed successfully!!!")
   return(df)
-
 }
+
 
 
 #' Generate data with linear shaped branches
@@ -264,13 +304,20 @@ gen_orglinearbranches <- function(n = 400, p = 4, k = 4) {
 #' @param n A numeric value (default: 400) representing the sample size.
 #' @param p A numeric value (default: 4) representing the number of dimensions.
 #' @param k A numeric value (default: 4) representing the number of branches.
+#' @param noise_fun A function specifying which noise generation function to
+#' use for the additional dimensions. Default is \code{gen_noisedims}.
+#' Other options include \code{gen_wavydims1}, \code{gen_wavydims2}, and
+#' \code{gen_wavydims3}.
+#' @param ... Additional arguments passed to the selected \code{noise_fun}
+#' (e.g., \code{m}, \code{s}, \code{theta}, \code{x1_vec}, \code{data}).
 #' @return A data containing linear shaped branches.
 #' @export
 #'
 #' @examples
 #' set.seed(20240412)
-#' linearbranches <- gen_linearbranches(n = 400, p = 4, k = 4)
-gen_linearbranches <- function(n = 400, p = 4, k = 4) {
+#' linearbranches <- gen_linearbranches(n = 400, p = 4, k = 4,
+#' noise_fun = gen_noisedims, m = rep(0, 2), s = rep(0.05, 2))
+gen_linearbranches <- function(n = 400, p = 4, k = 4, noise_fun = gen_noisedims, ...) {
 
   if (p < 2) {
     cli::cli_abort("p should be greater than 2.")
@@ -294,8 +341,28 @@ gen_linearbranches <- function(n = 400, p = 4, k = 4) {
 
   if (p > 2) {
 
-    noise_df <- gen_noisedims(n = NROW(df1), p = (p-2), m = rep(0, p-2), s = rep(0.05, p-2)) |>
-      as.matrix()
+    # If set defaults
+    if (identical(noise_fun, gen_noisedims)) {
+      dots <- list(...)
+      if (is.null(dots$m)) dots$m <- rep(0, p - 2)
+      if (is.null(dots$s)) dots$s <- rep(0.05, p - 2)
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df1), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims1)) {
+      dots <- list(...)
+      if (is.null(dots$theta)) dots$theta <- seq(pi / 6, 12 * pi / 6, length.out = n)
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df1), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims2)) {
+      dots <- list(...)
+      if (is.null(dots$x1_vec)) dots$x1_vec <- df[, 1]
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df1), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims3)) {
+      dots <- list(...)
+      if (is.null(dots$df)) dots$data <- df
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df1), p = p - 2), dots))
+    } else {
+      noise_df <- noise_fun(n = NROW(df1), p = p - 2, ...)
+    }
+    if (!is.matrix(noise_df)) noise_df <- as.matrix(noise_df)
     colnames(noise_df) <- paste0("x", 3:p)
 
     df1 <- cbind(df1, noise_df)
@@ -310,8 +377,29 @@ gen_linearbranches <- function(n = 400, p = 4, k = 4) {
 
   if (p > 2) {
 
-    noise_df <- gen_noisedims(n = NROW(df2), p = (p-2), m = rep(0, p-2), s = rep(0.05, p-2)) |>
-      as.matrix()
+    # If set defaults
+    if (identical(noise_fun, gen_noisedims)) {
+      dots <- list(...)
+      if (is.null(dots$m)) dots$m <- rep(0, p - 2)
+      if (is.null(dots$s)) dots$s <- rep(0.05, p - 2)
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df2), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims1)) {
+      dots <- list(...)
+      if (is.null(dots$theta)) dots$theta <- seq(pi / 6, 12 * pi / 6, length.out = n)
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df2), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims2)) {
+      dots <- list(...)
+      if (is.null(dots$x1_vec)) dots$x1_vec <- df[, 1]
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df2), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims3)) {
+      dots <- list(...)
+      if (is.null(dots$df)) dots$data <- df
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df2), p = p - 2), dots))
+    } else {
+      noise_df <- noise_fun(n = NROW(df2), p = p - 2, ...)
+    }
+    if (!is.matrix(noise_df)) noise_df <- as.matrix(noise_df)
+
     colnames(noise_df) <- paste0("x", 3:p)
 
     df2 <- cbind(df2, noise_df)
@@ -376,8 +464,29 @@ gen_linearbranches <- function(n = 400, p = 4, k = 4) {
 
       if (p > 2) {
 
-        noise_df <- gen_noisedims(n = NROW(df_branch), p = (p-2), m = rep(0, p-2), s = rep(0.05, p-2)) |>
-          as.matrix()
+        # If set defaults
+        if (identical(noise_fun, gen_noisedims)) {
+          dots <- list(...)
+          if (is.null(dots$m)) dots$m <- rep(0, p - 2)
+          if (is.null(dots$s)) dots$s <- rep(0.05, p - 2)
+          noise_df <- do.call(noise_fun, c(list(n = NROW(df_branch), p = p - 2), dots))
+        } else if (identical(noise_fun, gen_wavydims1)) {
+          dots <- list(...)
+          if (is.null(dots$theta)) dots$theta <- seq(pi / 6, 12 * pi / 6, length.out = n)
+          noise_df <- do.call(noise_fun, c(list(n = NROW(df_branch), p = p - 2), dots))
+        } else if (identical(noise_fun, gen_wavydims2)) {
+          dots <- list(...)
+          if (is.null(dots$x1_vec)) dots$x1_vec <- df[, 1]
+          noise_df <- do.call(noise_fun, c(list(n = NROW(df_branch), p = p - 2), dots))
+        } else if (identical(noise_fun, gen_wavydims3)) {
+          dots <- list(...)
+          if (is.null(dots$df)) dots$data <- df
+          noise_df <- do.call(noise_fun, c(list(n = NROW(df_branch), p = p - 2), dots))
+        } else {
+          noise_df <- noise_fun(n = NROW(df_branch), p = p - 2, ...)
+        }
+        if (!is.matrix(noise_df)) noise_df <- as.matrix(noise_df)
+
         colnames(noise_df) <- paste0("x", 3:p)
 
         df_branch <- cbind(df_branch, noise_df)
@@ -407,13 +516,19 @@ gen_linearbranches <- function(n = 400, p = 4, k = 4) {
 #' @param n A numeric value (default: 400) representing the sample size.
 #' @param p A numeric value (default: 4) representing the number of dimensions.
 #' @param k A numeric value (default: 4) representing the number of branches.
+#' @param noise_fun A function specifying which noise generation function to
+#' use for the additional dimensions. Default is \code{gen_noisedims}.
+#' Other options include \code{gen_wavydims1}, \code{gen_wavydims2}, and \code{gen_wavydims3}.
+#' @param ... Additional arguments passed to the selected \code{noise_fun}
+#' (e.g., \code{m}, \code{s}, \code{theta}, \code{x1_vec}, \code{data}).
 #' @return A data containing non-linear shaped branches.
 #' @export
 #'
 #' @examples
 #' set.seed(20240412)
-#' curvybranches <- gen_curvybranches(n = 400, p = 4, k = 4)
-gen_curvybranches <- function(n = 400, p = 4, k = 4) {
+#' curvybranches <- gen_curvybranches(n = 400, p = 4, k = 4,
+#' noise_fun = gen_noisedims, m = rep(0, 2), s = rep(0.05, 2))
+gen_curvybranches <- function(n = 400, p = 4, k = 4, noise_fun = gen_noisedims, ...) {
 
   if (p < 2) {
     cli::cli_abort("p should be greater than 2.")
@@ -437,8 +552,28 @@ gen_curvybranches <- function(n = 400, p = 4, k = 4) {
 
   if (p > 2) {
 
-    noise_df <- gen_noisedims(n = NROW(df1), p = (p-2), m = rep(0, p-2), s = rep(0.05, p-2)) |>
-      as.matrix()
+    # If set defaults
+    if (identical(noise_fun, gen_noisedims)) {
+      dots <- list(...)
+      if (is.null(dots$m)) dots$m <- rep(0, p - 2)
+      if (is.null(dots$s)) dots$s <- rep(0.05, p - 2)
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df1), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims1)) {
+      dots <- list(...)
+      if (is.null(dots$theta)) dots$theta <- seq(pi / 6, 12 * pi / 6, length.out = n)
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df1), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims2)) {
+      dots <- list(...)
+      if (is.null(dots$x1_vec)) dots$x1_vec <- df[, 1]
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df1), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims3)) {
+      dots <- list(...)
+      if (is.null(dots$df)) dots$data <- df
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df1), p = p - 2), dots))
+    } else {
+      noise_df <- noise_fun(n = NROW(df1), p = p - 2, ...)
+    }
+    if (!is.matrix(noise_df)) noise_df <- as.matrix(noise_df)
     colnames(noise_df) <- paste0("x", 3:p)
 
     df1 <- cbind(df1, noise_df)
@@ -453,8 +588,29 @@ gen_curvybranches <- function(n = 400, p = 4, k = 4) {
 
   if (p > 2) {
 
-    noise_df <- gen_noisedims(n = NROW(df2), p = (p-2), m = rep(0, p-2), s = rep(0.05, p-2)) |>
-      as.matrix()
+    # If set defaults
+    if (identical(noise_fun, gen_noisedims)) {
+      dots <- list(...)
+      if (is.null(dots$m)) dots$m <- rep(0, p - 2)
+      if (is.null(dots$s)) dots$s <- rep(0.05, p - 2)
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df2), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims1)) {
+      dots <- list(...)
+      if (is.null(dots$theta)) dots$theta <- seq(pi / 6, 12 * pi / 6, length.out = n)
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df2), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims2)) {
+      dots <- list(...)
+      if (is.null(dots$x1_vec)) dots$x1_vec <- df[, 1]
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df2), p = p - 2), dots))
+    } else if (identical(noise_fun, gen_wavydims3)) {
+      dots <- list(...)
+      if (is.null(dots$df)) dots$data <- df
+      noise_df <- do.call(noise_fun, c(list(n = NROW(df2), p = p - 2), dots))
+    } else {
+      noise_df <- noise_fun(n = NROW(df2), p = p - 2, ...)
+    }
+    if (!is.matrix(noise_df)) noise_df <- as.matrix(noise_df)
+
     colnames(noise_df) <- paste0("x", 3:p)
 
     df2 <- cbind(df2, noise_df)
@@ -499,8 +655,29 @@ gen_curvybranches <- function(n = 400, p = 4, k = 4) {
 
       if (p > 2) {
 
-        noise_df <- gen_noisedims(n = NROW(df_branch), p = (p-2), m = rep(0, p-2), s = rep(0.05, p-2)) |>
-          as.matrix()
+        # If set defaults
+        if (identical(noise_fun, gen_noisedims)) {
+          dots <- list(...)
+          if (is.null(dots$m)) dots$m <- rep(0, p - 2)
+          if (is.null(dots$s)) dots$s <- rep(0.05, p - 2)
+          noise_df <- do.call(noise_fun, c(list(n = NROW(df_branch), p = p - 2), dots))
+        } else if (identical(noise_fun, gen_wavydims1)) {
+          dots <- list(...)
+          if (is.null(dots$theta)) dots$theta <- seq(pi / 6, 12 * pi / 6, length.out = n)
+          noise_df <- do.call(noise_fun, c(list(n = NROW(df_branch), p = p - 2), dots))
+        } else if (identical(noise_fun, gen_wavydims2)) {
+          dots <- list(...)
+          if (is.null(dots$x1_vec)) dots$x1_vec <- df[, 1]
+          noise_df <- do.call(noise_fun, c(list(n = NROW(df_branch), p = p - 2), dots))
+        } else if (identical(noise_fun, gen_wavydims3)) {
+          dots <- list(...)
+          if (is.null(dots$df)) dots$data <- df
+          noise_df <- do.call(noise_fun, c(list(n = NROW(df_branch), p = p - 2), dots))
+        } else {
+          noise_df <- noise_fun(n = NROW(df_branch), p = p - 2, ...)
+        }
+        if (!is.matrix(noise_df)) noise_df <- as.matrix(noise_df)
+
         colnames(noise_df) <- paste0("x", 3:p)
 
         df_branch <- cbind(df_branch, noise_df)
@@ -512,8 +689,6 @@ gen_curvybranches <- function(n = 400, p = 4, k = 4) {
     }
 
   }
-
-
 
   df <- tibble::as_tibble(df, .name_repair = "minimal")
   names(df) <- paste0("x", 1:p)

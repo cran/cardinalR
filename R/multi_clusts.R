@@ -13,6 +13,7 @@
 #' @param shape A character vector (default: c("gen_gaussian", "gen_cone", "gen_unifcube")) representing the shapes of clusters.
 #' @param rotation A numeric list which contains plane and the corresponding angle along that plane for each cluster.
 #' @param is_bkg A Boolean value (default: FALSE) representing the background noise should exist or not.
+#' @param ... Additional arguments passed to the cluster generator functions.
 #' @return A data containing same/different shaped clusters.
 #' @export
 #'
@@ -44,125 +45,93 @@ gen_multicluster <- function(n = c(200, 300, 500), p = 4, k = 3,
                              loc = matrix(c(
                                0, 0, 0, 0,
                                5, 9, 0, 0,
-                               3, 4, 10, 7  # height of smaller equilateral triangle in 2D
+                               3, 4, 10, 7
                              ), nrow = 3, byrow = TRUE),
                              scale = c(3, 1, 2),
                              shape = c("gaussian", "bluntedcorn", "unifcube"),
                              rotation = NULL,
-                             is_bkg = FALSE) {
+                             is_bkg = FALSE,
+                             ...) {
 
-  if (p < 2) {
-    cli::cli_abort("p should be greater than 2.")
+  # --- checks ---
+  if (p < 2) cli::cli_abort("p should be greater than 2.")
+  if (k < 1) cli::cli_abort("k should be greater than 1.")
+  if (length(n) != k) cli::cli_abort("n should contain exactly {.val {k}} values.")
+  if (any(n < 0)) cli::cli_abort("Values in n should be positive.")
+  if (length(scale) != k) cli::cli_abort("scale should contain exactly {.val {k}} values.")
+  if (any(scale < 0)) cli::cli_abort("Values in scale should be positive.")
+  if (length(shape) != k) cli::cli_abort("shape should contain exactly {.val {k}} values.")
+
+  # handle loc
+  if (!is.null(loc)) {
+    if (!is.matrix(loc)) cli::cli_abort("loc should be a matrix.")
+    if (NROW(loc) != k) cli::cli_abort("Number of rows in loc should be {.val {k}}.")
+    if (NCOL(loc) != p) cli::cli_abort("Number of cols in loc should be {.val {p}}.")
   }
 
-  if (k < 1) {
-    cli::cli_abort("k should be greater than 1.")
+  # handle rotation
+  if (!is.null(rotation) && !is.list(rotation)) cli::cli_abort("rotation should be a list or NULL.")
+  if (is.list(rotation) && length(rotation) != k) {
+    cli::cli_abort("Number of elements in rotation should be {.val {k}}.")
   }
 
-  if (length(n) != k) {
-    cli::cli_abort("n should contain exactly {.val {k}} values.")
-  }
+  # --- generate clusters ---
+  dfs <- vector("list", k)
+  for (i in seq_len(k)) {
 
-  if (any(n < 0)) {
-    cli::cli_abort("Values in n should be positive.")
-  }
+    # get generator function
+    fn <- tryCatch(match.fun(paste0("gen_", shape[i])),
+                   error = function(e) cli::cli_abort("No generator found for shape {.val {shape[i]}}."))
 
-  if (length(scale) != k) {
-    cli::cli_abort("scale should contain exactly {.val {k}} values.")
-  }
+    # generate cluster
+    cluster_df <- fn(n = n[i], p = p, ...)
 
-  if (any(scale < 0)) {
-    cli::cli_abort("Values in scale should be positive.")
-  }
-
-  if (length(shape) != k) {
-    cli::cli_abort("shape should contain exactly {.val {k}} values.")
-  }
-
-  if (!is.null(loc) && !is.matrix(loc)) {
-    cli::cli_abort("loc should be a matrix.")
-  }
-
-  if (!is.null(loc) && NROW(loc) != k) {
-    cli::cli_abort("Number of rows in loc should be {.val {k}}.")
-  }
-
-  if (!is.null(loc) && NCOL(loc) != p) {
-    cli::cli_abort("Number of rows in loc should be {.val {p}}.")
-  }
-
-  if (!is.null(rotation) && !is.list(rotation)) {
-    cli::cli_abort("rotation should be a list or NULL.")
-  }
-
-  if (is.list(rotation)) {
-    if (length(rotation) != k) {
-      cli::cli_abort("Number of elements in rotation should be {.val {k}}.")
+    # ensure it's a data frame with valid column names
+    cluster_df <- as.data.frame(cluster_df)
+    if (is.null(colnames(cluster_df)) || any(colnames(cluster_df) == "")) {
+      colnames(cluster_df) <- paste0("x", seq_len(ncol(cluster_df)))
     }
-  }
-  dfs <- list()
 
-  ## To generate different shaped clusters
-  for (i in 1:k) {
-
-    ## To generate the cluster
-    cluster_df <- get(paste0("gen_", shape[i]))(n = n[i], p = p)
-
-    ## To normalize the data
-    cluster_df <- normalize_data(data = cluster_df)
-
-    ## To multiply by the scale factor
+    # normalize and scale
+    cluster_df <- normalize_data(cluster_df)
     cluster_df <- scale[i] * cluster_df
 
-    ## To rotate the cluster
-    if(!is.null(rotation)) {
+    # rotate if needed
+    if (!is.null(rotation)) {
       rotation_clust <- gen_rotation(p = p, planes_angles = rotation[[i]])
       cluster_df <- t(rotation_clust %*% t(cluster_df))
-
     }
 
-    ## To move to the center
+    # center and shift
     cluster_df <- apply(cluster_df, 2, function(col) col - mean(col))
-
-    if(!is.null(loc)) {
-
-      ## To re-position the data to centroids given
-      cluster_df <- cluster_df + matrix(rep(loc[i,], NROW(cluster_df)), ncol=p, byrow=T)
-
+    if (!is.null(loc)) {
+      cluster_df <- cluster_df + matrix(rep(loc[i, ], NROW(cluster_df)), ncol = p, byrow = TRUE)
     }
 
-    cluster_df <- cluster_df |>
-      tibble::as_tibble(.name_repair = "minimal")
+    # convert to tibble and add cluster label
+    cluster_df <- tibble::as_tibble(cluster_df, .name_repair = "minimal")
+    names(cluster_df)[1:p] <- paste0("x", 1:p)
 
-    names(cluster_df) <- paste0("x", 1:p)
-
-    ## To add cluster label
-    dfs[[i]] <- cluster_df |>
+    dfs[[i]] <-  cluster_df |>
       dplyr::mutate(cluster = paste0("cluster", i))
-
 
   }
 
-  ## To combine the data
+  # --- combine ---
   df <- dplyr::bind_rows(dfs)
 
-  # ## Add background noise
-  if(isTRUE(is_bkg)) {
-
-    mean <- colMeans(df[sapply(df, is.numeric)])
-    std <- sapply(df[sapply(df, is.numeric)], stats::sd)
-
-    noise_df <- gen_bkgnoise(n = max(n) * 0.1, p = p,
-                             m = mean, s = std) |>
+  # add background noise if needed
+  if (isTRUE(is_bkg)) {
+    mean_vals <- colMeans(df[sapply(df, is.numeric)])
+    std_vals  <- sapply(df[sapply(df, is.numeric)], stats::sd)
+    noise_df <- gen_bkgnoise(n = max(n) * 0.1, p = p, m = mean_vals, s = std_vals) |>
       dplyr::mutate(cluster = "bkg_noise")
-
     df <- dplyr::bind_rows(df, noise_df)
   }
 
-  ## Swap rows
+  # shuffle rows
   df <- randomize_rows(df)
 
   cli::cli_alert_success("Multiple clusters generation completed successfully!!!")
   return(df)
-
 }

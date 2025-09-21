@@ -12,7 +12,8 @@ gen_multicluster(
   scale = c(3, 1, 2),
   shape = c("gaussian", "bluntedcorn", "unifcube"),
   rotation = NULL,
-  is_bkg = FALSE
+  is_bkg = FALSE,
+  ...
 )
 }
 \arguments{
@@ -34,6 +35,8 @@ gen_multicluster(
 \item{rotation}{A numeric list which contains plane and the corresponding angle along that plane for each cluster.}
 
 \item{is_bkg}{A Boolean value (default: FALSE) representing the background noise should exist or not.}
+
+\item{...}{Additional arguments passed to the cluster generator functions.}
 }
 \value{
 A data containing same/different shaped clusters.

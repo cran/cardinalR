@@ -25,7 +25,7 @@ curvy_cyc_data <- gen_curvycycle(n = 500, p = 4)
 langevitour(curvy_cyc_data, pointSize = 2)
 
 ## -----------------------------------------------------------------------------
-tree_data <- gen_orgcurvybranches(n = 600, p = 6, k = 6) 
+tree_data <- gen_orgcurvybranches(n = 600, p = 6, k = 6, noise_fun = gen_noisedims, m = rep(0, 4), s = rep(0.1, 4)) 
 
 langevitour(tree_data, pointSize = 2)
 
@@ -50,7 +50,7 @@ scurve_data <- gen_scurvehole(n = 600, p = 8)
 langevitour(scurve_data, pointSize = 2)
 
 ## -----------------------------------------------------------------------------
-pyr_data <- gen_pyrholes(n = 1000, p = 4)
+pyr_data <- gen_pyrfrac(n = 1000, p = 4)
 
 langevitour(pyr_data, pointSize = 2)
 
