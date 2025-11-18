@@ -1,7 +1,7 @@
 Type: Package
 Package: cardinalR
 Title: Collection of Data Structures
-Version: 0.2.6
+Version: 1.0.1
 Authors@R: c(
     person("Jayani P.", "Gamage", , "jayanilakshika76@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-6265-6481")),
@@ -23,7 +23,7 @@ URL: https://jayanilakshika.github.io/cardinalR/
 BugReports: https://github.com/JayaniLakshika/cardinalR/issues
 Depends: R (>= 4.1.0)
 Imports: cli, dplyr, geozoo, gtools, MASS, mvtnorm, purrr, stats,
-        tibble, tidyr, utils
+        tibble, tidyr
 Suggests: knitr, langevitour, rmarkdown, testthat (>= 3.0.0)
 VignetteBuilder: knitr
 Config/testthat/edition: 3
@@ -32,7 +32,7 @@ Language: en-GB
 LazyData: true
 RoxygenNote: 7.3.3
 NeedsCompilation: no
-Packaged: 2025-09-21 06:54:17 UTC; jpiy0001
+Packaged: 2025-11-18 00:21:14 UTC; jpiy0001
 Author: Jayani P. Gamage [aut, cre] (ORCID:
     <https://orcid.org/0000-0002-6265-6481>),
   Dianne Cook [aut] (ORCID: <https://orcid.org/0000-0002-3813-7155>),
@@ -43,4 +43,4 @@ Author: Jayani P. Gamage [aut, cre] (ORCID:
     <https://orcid.org/0000-0002-0656-9789>)
 Maintainer: Jayani P. Gamage <jayanilakshika76@gmail.com>
 Repository: CRAN
-Date/Publication: 2025-09-21 07:10:02 UTC
+Date/Publication: 2025-11-18 00:40:02 UTC
